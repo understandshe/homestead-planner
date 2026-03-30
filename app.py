@@ -54,7 +54,7 @@ with col1:
             <a href="{bmc_link}" target="_blank">
                 <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" >
             </a>
-        ''', unsafe_allow_stdio=True)
+        ''', unsafe_allow_html=True)
         st.caption("Secure Payment via Stripe / PayPal")
     else:
         st.success("✅ **Payment Verified!**")
