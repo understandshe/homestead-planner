@@ -1,42 +1,12 @@
-# ============================================
-# HOMESTEAD PLANNER - REQUIREMENTS
-# ============================================
-
-# --- Core Web Framework ---
 streamlit>=1.28.0
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-python-multipart>=0.0.0
-
-# --- Data Processing ---
 pandas>=2.0.0
 numpy>=1.24.0
 Pillow>=10.0.0
-
-# --- SVG & Graphics Generation ---
 svglib>=1.5.1
 reportlab>=4.0.0
-cairosvg>=2.7.0
-drawsvg>=2.0.0
-
-# --- PDF Export ---
-weasyprint>=60.0
 fpdf2>=2.7.0
-
-# --- AI Image Generation (Optional) ---
-openai>=1.0.0
-stability-sdk>=0.8.0
-replicate>=0.15.0
-
-# --- Utilities ---
 python-dotenv>=1.0.0
 pydantic>=2.0.0
-pydantic-settings>=2.0.0
 jinja2>=3.1.0
 pyyaml>=6.0.1
 requests>=2.31.0
-
-# --- Development & Testing ---
-pytest>=7.4.0
-black>=23.0.0
-flake8>=6.0.0
