@@ -365,6 +365,11 @@ if generate_btn:
         st.session_state.project_name = project_name
         st.session_state.total_sqft = total_sqft
         st.session_state.currency_code = currency_code
+        st.session_state.z0 = z0
+        st.session_state.z1 = z1
+        st.session_state.z2 = z2
+        st.session_state.z3 = z3
+        st.session_state.z4 = z4
 
 # Display results if generated
 if st.session_state.generated and st.session_state.map_buffer:
@@ -372,7 +377,7 @@ if st.session_state.generated and st.session_state.map_buffer:
     # Show Map
     st.image(st.session_state.map_buffer, 
              caption=f"{st.session_state.project_name} - {st.session_state.total_sqft:,} sq.ft.", 
-             use_column_width=True)
+             use_container_width=True)
     
     # COST ANALYSIS SECTION
     st.divider()
@@ -503,25 +508,37 @@ if st.session_state.generated and st.session_state.map_buffer:
         
         st.session_state.download_pending = None
     
-    # ZONE DATA TABLE
+    # ZONE DATA TABLE - FIXED
     st.divider()
     st.subheader("Zone Calculations")
     
     import pandas as pd
+    
+    # Get zone values from session state
+    sz0 = st.session_state.get('z0', z0)
+    sz1 = st.session_state.get('z1', z1)
+    sz2 = st.session_state.get('z2', z2)
+    sz3 = st.session_state.get('z3', z3)
+    sz4 = st.session_state.get('z4', z4)
+    total = st.session_state.total_sqft
+    
     df = pd.DataFrame({
-        'Zone':        ['Zone 0', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4/5', 'TOTAL'],
+        'Zone': ['Zone 0', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4/5', 'TOTAL'],
         'Description': ['Residential', 'Kitchen Garden', 'Food Forest',
                         'Pasture/Crops', 'Buffer/Fence', ''],
-        'Area (sq.ft.)':[f"{st.session_state.total_sqft*z0/100:,.0f}",
-                         f"{st.session_state.total_sqft*z1/100:,.0f}",
-                         f"{st.session_state.total_sqft*z2/100:,.0f}",
-                         f"{st.session_state.total_sqft*z3/100:,.0f}",
-                         f"{st.session_state.total_sqft*z4/100:,.0f}",
-                         f"{st.session_state.total_sqft:,.0f}"],
-        'Percentage':  [f"{z0}%", f"{z1}%", f"{z2}%",
-                        f"{z3}%", f"{z4}%", "100%"],
+        'Area (sq.ft.)': [
+            f"{int(total * sz0 / 100):,}",
+            f"{int(total * sz1 / 100):,}",
+            f"{int(total * sz2 / 100):,}",
+            f"{int(total * sz3 / 100):,}",
+            f"{int(total * sz4 / 100):,}",
+            f"{int(total):,}"
+        ],
+        'Percentage': [f"{sz0}%", f"{sz1}%", f"{sz2}%", f"{sz3}%", f"{sz4}%", "100%"],
     })
-    st.dataframe(df, use_column_width=True, hide_index=True)
+    
+    # FIXED: use_container_width instead of use_column_width
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 else:
     # Default placeholder
@@ -546,8 +563,4 @@ else:
     - **Small (< 20,000 sq.ft.)**: Urban/suburban homesteads
     - **Medium (20,000 - 100,000 sq.ft.)**: Rural homesteads
     - **Large (> 100,000 sq.ft.)**: Farm-scale operations
-    
-    ### Watermark Protection:
-    - When enabled: Large semi-transparent watermark across entire image and PDF
-    - When disabled: Small corner watermarks that cannot be easily cropped out
     """)
