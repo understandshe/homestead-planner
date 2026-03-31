@@ -302,6 +302,9 @@ def generate_visual(
     water_src: str = 'Borewell + Rainwater',
     num_tree_species: int = 4,
 
+    # House / Zone 0 position: 'NW' | 'NE' | 'SW' | 'SE'
+    house_pos: str = 'NW',
+
     # Output
     locked: bool = True,
     dpi: int = 300,
@@ -324,17 +327,37 @@ def generate_visual(
     z4_sqft = total_sqft * zf['z4']
 
     # ── layout geometry ─────────────────────────
-    # Y breakdown (bottom → top):
-    # zone3 | zone2 | zone1+zone0 stacked
     z3_h = W * (zf['z3'] + zf['z4'] * 0.5)
     z2_h = W * zf['z2']
     z1_h = W * zf['z1']
-    z0_h = W * (zf['z0'] + zf['z4'] * 0.5)   # remaining
+    z0_h = W * (zf['z0'] + zf['z4'] * 0.5)
 
-    z3_y = 0
-    z2_y = z3_h
-    z1_y = z3_h + z2_h
-    z0_y = z3_h + z2_h + z1_h
+    # house_pos controls which corner Zone 0 occupies
+    hp        = (house_pos or 'NW').upper()[:2]
+    z0_on_top = hp in ('NW', 'NE')
+    z0_on_lft = hp in ('NW', 'SW')
+
+    if z0_on_top:
+        # Z3 bottom → Z2 → Z1 → Z0 top  (default)
+        z3_y = 0
+        z2_y = z3_h
+        z1_y = z3_h + z2_h
+        z0_y = z3_h + z2_h + z1_h
+    else:
+        # Z0 bottom → Z1 → Z2 → Z3 top
+        z0_y = 0
+        z1_y = z0_h
+        z2_y = z0_h + z1_h
+        z3_y = z0_h + z1_h + z2_h
+
+    # horizontal split between Zone 0 and Zone 1
+    z0_section_w = L * 0.35
+    if z0_on_lft:
+        z0_x_off = 2                        # Zone 0 starts at left
+        z1_x_off = z0_section_w             # Zone 1 starts after Zone 0
+    else:
+        z1_x_off = 2                        # Zone 1 starts at left
+        z0_x_off = L - z0_section_w + 2    # Zone 0 starts at right
 
     # ── figure setup ────────────────────────────
     fig_w = 14
@@ -364,13 +387,13 @@ def generate_visual(
         ))
 
     # ── ZONE 0 — Residential ────────────────────
-    z0_w = L * 0.35
-    _zone_rect(ax, 2, z0_y + 2, z0_w - 4, z0_h - 4,
+    z0_w = z0_section_w
+    _zone_rect(ax, z0_x_off, z0_y + 2, z0_w - 4, z0_h - 4,
                C['zone0_f'], C['zone0_e'], lw=1.2, zorder=2)
 
     # house footprint
     house_w, house_h = z0_w * 0.45, z0_h * 0.50
-    house_x = 2 + (z0_w - house_w) / 2 - 4
+    house_x = z0_x_off + (z0_w - house_w) / 2 - 4
     house_y = z0_y + z0_h * 0.25
     _zone_rect(ax, house_x, house_y, house_w, house_h,
                '#B3D3ED', C['zone0_e'], lw=0.8, zorder=3)
@@ -392,9 +415,9 @@ def generate_visual(
         facecolor='#1A5276', edgecolor=C['zone0_e'], lw=0.5, zorder=5
     ))
     # parking strip
-    _zone_rect(ax, 2, z0_y + 2, z0_w * 0.25, z0_h * 0.2,
+    _zone_rect(ax, z0_x_off, z0_y + 2, z0_w * 0.25, z0_h * 0.2,
                C['path_c'], C['zone4_e'], lw=0.5, zorder=3)
-    ax.text(2 + z0_w * 0.125, z0_y + z0_h * 0.11, 'PARKING',
+    ax.text(z0_x_off + z0_w * 0.125, z0_y + z0_h * 0.11, 'PARKING',
             ha='center', va='center', fontsize=5.5,
             color='#444', **FONT_MONO, zorder=5)
     # shed
@@ -406,14 +429,14 @@ def generate_visual(
             'SHED', ha='center', fontsize=5.5,
             color=C['zone0_e'], **FONT_MONO, zorder=5)
 
-    _zone_label(ax, z0_w * 0.5 + 2, z0_y + z0_h * 0.08,
+    _zone_label(ax, z0_x_off + z0_w * 0.5, z0_y + z0_h * 0.08,
                 'ZONE 0 — RESIDENTIAL',
                 f'{z0_sqft:,.0f} sq.ft. | {zf["z0"]*100:.0f}%',
                 fc=C['zone0_e'], sc='#2471A3', fs=8)
 
     # ── ZONE 1 — Kitchen Garden ──────────────────
-    z1_x = z0_w
-    z1_w = L - z0_w
+    z1_x = z1_x_off
+    z1_w = L - z0_section_w
     _zone_rect(ax, z1_x, z1_y + 2, z1_w - 2, z1_h - 4,
                C['zone1_f'], C['zone1_e'], lw=1.2, hatch='///', zorder=2)
 
