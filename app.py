@@ -7,60 +7,60 @@ import streamlit as st
 import io
 from homestead_map import generate_visual, generate_pdf_report, get_plot_category, CURRENCY_DATA
 import streamlit as st
-# AFFILIATE PRODUCT DATABASE WITH DYNAMIC CTA LOGIC
+# AFFILIATE PRODUCT DATABASE WITH UNIVERSAL CTA LOGIC - UPDATED
 AFFILIATE_PRODUCTS = {
     1: {
-        "name": "Self Sufficient Backyard (ClickBank)",
+        "name": "Self Sufficient Backyard System",
         "url": "https://74c1ailom3rncwaldylac5xc0m.hop.clickbank.net",
         "ctas": {
-            "small": "Grow fresh food from your small rooftop or balcony and save up to $1,600!",
-            "medium": "Transform your kitchen garden into a goldmine and start self-sufficient farming today!",
-            "large": "Discover how to 10x your annual $2,400 income from your vast land! Click to learn the secret!"
+            "small": "Transform even the tiniest space into a thriving food paradise. Start growing your own organic meals within weeks, not months.",
+            "medium": "Unlock the secret method that turns ordinary backyards into self-sustaining food ecosystems. Your grocery store will wonder where you went.",
+            "large": "Discover how homesteaders worldwide are producing enough food to feed entire communities from their own land. Scale your harvest beyond imagination."
         }
     },
     2: {
-        "name": "Energy Revolution System (ClickBank)",
+        "name": "Energy Independence Blueprint",
         "url": "https://d92ebgtuifnm3o39udsrbrdn9y.hop.clickbank.net",
         "ctas": {
-            "small": "Cut your electricity bill to ZERO for small homes! Generate power without heavy solar panels.",
-            "medium": "Power your entire farm and pumps with FREE electricity. Say goodbye to heavy bills forever!",
-            "large": "Save the $3,105 solar cost mentioned in reports! Go off-grid for your entire land for just $100!"
+            "small": "Slash your energy bills to nearly zero using forgotten technology that fits in your closet. The power companies don't want you to see this.",
+            "medium": "Generate your own clean electricity day and night. Never worry about blackouts, rate hikes, or grid failures again.",
+            "large": "Build a power system so robust it can run entire farm operations off-grid. Energy independence was never this achievable."
         }
     },
     3: {
-        "name": "My Shed Plans (ClickBank)",
+        "name": "Complete Shed & Structure Plans",
         "url": "https://3a412hnji5uyct5hi-ghpwvre4.hop.clickbank.net",
         "ctas": {
-            "small": "Download perfect shed and storage designs for your small yard here.",
-            "medium": "Get 16,000+ professional shed and workshop designs for your property!",
-            "large": "World's most accurate architecture plans for building homes and large warehouses in Zone 0!"
+            "small": "Download professional-grade plans for the perfect backyard workshop. Build it yourself this weekend with basic tools.",
+            "medium": "Access the world's largest collection of proven shed designs. From chicken coops to equipment barns - every blueprint engineered for durability.",
+            "large": "Get architect-approved plans for farm buildings that last generations. Barns, greenhouses, storage facilities - build once, build right."
         }
     },
     4: {
-        "name": "Heavy Duty Fencing Mesh (Amazon)",
+        "name": "Premium Perimeter Security System",
         "url": "https://amzn.to/3PEkBMV",
         "ctas": {
-            "small": "Secure your boundary at low cost. Easy to install and durable fencing!",
-            "medium": "Reduce the $3,548 fencing cost! This heavy-duty mesh secures your entire property.",
-            "large": "Best privacy and security solution for large farmland. Order your fencing kit now!"
+            "small": "Protect your garden from unwanted visitors with industrial-strength fencing that installs in hours, not days. Peace of mind included.",
+            "medium": "Secure your entire property perimeter with professional-grade materials designed to withstand decades of weather and wildlife.",
+            "large": "Fortify vast acreage with the same fencing systems used by commercial farms worldwide. Security that scales with your ambitions."
         }
     },
     5: {
-        "name": "240FT Drip Irrigation Kit (Amazon)",
+        "name": "Smart Water Management System",
         "url": "https://amzn.to/4dgxFBX",
         "ctas": {
-            "small": "Automatic watering for small kitchen gardens. Stop worrying about watering plants!",
-            "medium": "Automate irrigation for your entire land. Save water and boost yields!",
-            "large": "Manage the $1,996 drip system budget. Professional irrigation kit for large farms here!"
+            "small": "Never forget to water again. This intelligent system delivers perfect hydration to every plant while you focus on other things.",
+            "medium": "Revolutionize your growing operation with precision irrigation technology. Cut water waste, boost yields, eliminate daily watering chores.",
+            "large": "Deploy commercial-grade irrigation across extensive growing areas. The same technology feeding the world's most productive farms, now sized for you."
         }
     },
     6: {
-        "name": "VIVOSUN Submersible Pump (Amazon)",
+        "name": "Professional Water Circulation Pump",
         "url": "https://amzn.to/3NWPEmC",
         "ctas": {
-            "small": "The quietest and most powerful pump for your small fish tank or aquarium.",
-            "medium": "Ultra-quiet submersible pump for garden ponds and fountains. Easy setup!",
-            "large": "Perfect 800GPH pump for drainage and water flow systems. Buy now!"
+            "small": "Keep your aquatic ecosystem thriving with whisper-quiet circulation. So silent you'll forget it's running.",
+            "medium": "Power ponds, fountains, and water features with professional-grade reliability. Engineered for continuous operation, season after season.",
+            "large": "Move massive water volumes efficiently across your property. Drainage, irrigation, circulation - one pump handles it all without breaking a sweat."
         }
     }
 }
