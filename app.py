@@ -6,7 +6,18 @@ Run: streamlit run app.py
 import streamlit as st
 import io
 from homestead_map import generate_visual, generate_pdf_report, get_plot_category, CURRENCY_DATA
+import streamlit as st
+st.set_page_config(page_title="ChundalGardens Planner", layout="wide")
 
+hide_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display:none;}
+    </style>
+    """
+st.markdown(hide_style, unsafe_allow_html=True)
 # AFFILIATE PRODUCT DATABASE WITH DYNAMIC CTA LOGIC
 AFFILIATE_PRODUCTS = {
     1: {
