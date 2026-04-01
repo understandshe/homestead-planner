@@ -1,16 +1,18 @@
 """
-Homestead Map Generator - Core Module
-Generates professional site plans and PDF reports with watermarking
+Homestead Map Generator - Advanced Dynamic Module
+Generates unique professional site plans based on user data
 """
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.patches import FancyBboxPatch, Circle, Rectangle, Polygon, Arrow
+from matplotlib.patches import FancyBboxPatch, Circle, Rectangle, Polygon, Arc, Wedge
+from matplotlib.collections import PatchCollection
 import numpy as np
 from io import BytesIO
 from PIL import Image
 import io
 import math
+import random
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import A4
@@ -125,219 +127,615 @@ def format_currency(amount, symbol):
         return f"{symbol}{amount:,.0f}"
 
 
+def generate_random_seed(name, L, W):
+    """Generate deterministic seed from inputs for consistent randomness"""
+    return hash(f"{name}{L}{W}") % (2**32)
+
+
+def calculate_optimal_layout(L, W, house_position, zone_fracs, features):
+    """
+    Calculate optimal positioning for all elements based on plot geometry
+    Returns dictionary with calculated positions
+    """
+    layout = {
+        'zones': {},
+        'house': {},
+        'features': {},
+        'trees': [],
+        'paths': []
+    }
+    
+    total_area = L * W
+    
+    # Calculate zone boundaries based on house position
+    if house_position == "North":
+        zone_order = ['z4', 'z3', 'z2', 'z1', 'z0']
+        y_start = W
+        y_direction = -1
+    elif house_position == "South":
+        zone_order = ['z0', 'z1', 'z2', 'z3', 'z4']
+        y_start = 0
+        y_direction = 1
+    elif house_position == "East":
+        zone_order = ['z2', 'z1', 'z0', 'z3', 'z4']
+        y_start = 0
+        y_direction = 1
+    elif house_position == "West":
+        zone_order = ['z3', 'z2', 'z1', 'z0', 'z4']
+        y_start = 0
+        y_direction = 1
+    else:  # Center - radial layout
+        zone_order = ['z0', 'z1', 'z2', 'z3', 'z4']
+        y_start = W/2
+        y_direction = 1
+    
+    # Calculate zone positions
+    current_y = 0 if y_start == 0 else W
+    for zone in zone_order:
+        height = W * zone_fracs[zone]
+        if house_position in ["North", "South"]:
+            layout['zones'][zone] = {
+                'x': 0, 'y': min(current_y, current_y + y_direction * height),
+                'width': L, 'height': height
+            }
+            current_y += y_direction * height
+        else:
+            # For East/West/Center, create different layout
+            if zone == 'z0':
+                layout['zones'][zone] = {
+                    'x': L*0.3, 'y': W*0.4,
+                    'width': L*0.4, 'height': W*0.2
+                }
+            elif zone == 'z1':
+                layout['zones'][zone] = {
+                    'x': L*0.2, 'y': W*0.2,
+                    'width': L*0.6, 'height': W*0.2
+                }
+            elif zone == 'z2':
+                layout['zones'][zone] = {
+                    'x': L*0.1, 'y': W*0.6,
+                    'width': L*0.8, 'height': W*0.3
+                }
+            elif zone == 'z3':
+                layout['zones'][zone] = {
+                    'x': 0, 'y': 0,
+                    'width': L, 'height': W*0.2
+                }
+            else:
+                layout['zones'][zone] = {
+                    'x': 0, 'y': W*0.9,
+                    'width': L, 'height': W*0.1
+                }
+    
+    # House position
+    if house_position == "North":
+        layout['house'] = {'x': L*0.3, 'y': W*0.85, 'width': L*0.4, 'height': W*0.12}
+    elif house_position == "South":
+        layout['house'] = {'x': L*0.3, 'y': W*0.03, 'width': L*0.4, 'height': W*0.12}
+    elif house_position == "East":
+        layout['house'] = {'x': L*0.75, 'y': W*0.35, 'width': L*0.2, 'height': W*0.3}
+    elif house_position == "West":
+        layout['house'] = {'x': L*0.05, 'y': W*0.35, 'width': L*0.2, 'height': W*0.3}
+    else:  # Center
+        layout['house'] = {'x': L*0.35, 'y': W*0.4, 'width': L*0.3, 'height': W*0.2}
+    
+    # Feature positions - randomized but logical
+    seed = generate_random_seed(str(layout), L, W)
+    np.random.seed(seed)
+    
+    # Borewell - prefer North-East or based on selection
+    if features.get('has_borewell'):
+        if 'North-East' in features.get('borewell_loc', ''):
+            layout['features']['borewell'] = {'x': L*0.9, 'y': W*0.9, 'radius': min(L,W)*0.02}
+        elif 'North-West' in features.get('borewell_loc', ''):
+            layout['features']['borewell'] = {'x': L*0.1, 'y': W*0.9, 'radius': min(L,W)*0.02}
+        elif 'South-East' in features.get('borewell_loc', ''):
+            layout['features']['borewell'] = {'x': L*0.9, 'y': W*0.1, 'radius': min(L,W)*0.02}
+        else:
+            layout['features']['borewell'] = {'x': L*0.1, 'y': W*0.1, 'radius': min(L,W)*0.02}
+    
+    # Pond - usually in Zone 2 or 3, lower elevation
+    if features.get('has_pond'):
+        pond_zones = ['z2', 'z3']
+        for zone in pond_zones:
+            if zone in layout['zones']:
+                z = layout['zones'][zone]
+                layout['features']['pond'] = {
+                    'x': z['x'] + z['width']*0.3 + np.random.random()*z['width']*0.4,
+                    'y': z['y'] + z['height']*0.2 + np.random.random()*z['height']*0.3,
+                    'radius': min(L, W) * (0.05 + np.random.random() * 0.05),
+                    'irregular': True
+                }
+                break
+    
+    # Solar - near house, south-facing if possible
+    if features.get('has_solar'):
+        h = layout['house']
+        layout['features']['solar'] = {
+            'x': h['x'] + h['width'] + L*0.05,
+            'y': h['y'] + h['height']*0.1,
+            'width': L*0.15,
+            'height': L*0.1,
+            'angle': 15 if house_position in ['North', 'South'] else 0
+        }
+    
+    # Greenhouse - Zone 1 or 2
+    if features.get('has_greenhouse'):
+        for zone in ['z1', 'z2']:
+            if zone in layout['zones']:
+                z = layout['zones'][zone]
+                layout['features']['greenhouse'] = {
+                    'x': z['x'] + z['width']*0.1,
+                    'y': z['y'] + z['height']*0.3,
+                    'width': min(z['width']*0.4, L*0.25),
+                    'height': min(z['height']*0.4, W*0.2),
+                    'orientation': 'horizontal' if z['width'] > z['height'] else 'vertical'
+                }
+                break
+    
+    # Poultry - Zone 3 or 4, away from house
+    if features.get('has_poultry'):
+        for zone in ['z3', 'z4']:
+            if zone in layout['zones']:
+                z = layout['zones'][zone]
+                layout['features']['poultry'] = {
+                    'x': z['x'] + z['width']*0.1 + np.random.random()*z['width']*0.5,
+                    'y': z['y'] + z['height']*0.2 + np.random.random()*z['height']*0.5,
+                    'width': L*0.08,
+                    'height': W*0.06
+                }
+                break
+    
+    # Compost - multiple bins in different zones
+    if features.get('has_compost'):
+        compost_positions = []
+        for zone in ['z1', 'z2', 'z3']:
+            if zone in layout['zones'] and len(compost_positions) < 3:
+                z = layout['zones'][zone]
+                compost_positions.append({
+                    'x': z['x'] + z['width']*0.8,
+                    'y': z['y'] + z['height']*0.1,
+                    'size': min(L, W)*0.015
+                })
+        layout['features']['compost'] = compost_positions
+    
+    # Swales - contour lines based on slope
+    if features.get('has_swale'):
+        num_swales = 2 + int(W / 100)  # More swales for larger plots
+        swales = []
+        for i in range(num_swales):
+            y_pos = W * (0.2 + i * (0.6 / num_swales))
+            # Create curved swale following contour
+            x_points = np.linspace(0, L, 20)
+            y_points = y_pos + np.sin(x_points / L * 4 * np.pi) * W * 0.02
+            swales.append({'x': x_points, 'y': y_points})
+        layout['features']['swales'] = swales
+    
+    # Trees - distributed in food forest zone
+    num_trees = features.get('num_tree_species', 5)
+    custom_trees = features.get('custom_trees', [])
+    
+    if 'z2' in layout['zones']:
+        z = layout['zones']['z2']
+        for i in range(max(len(custom_trees), num_trees)):
+            if i < len(custom_trees) and custom_trees[i].strip():
+                tree_name = custom_trees[i]
+            else:
+                tree_name = f"Tree {i+1}"
+            
+            # Random position within zone with minimum spacing
+            attempts = 0
+            while attempts < 10:
+                tx = z['x'] + np.random.random() * z['width'] * 0.8 + z['width'] * 0.1
+                ty = z['y'] + np.random.random() * z['height'] * 0.8 + z['height'] * 0.1
+                
+                # Check spacing from other trees
+                too_close = False
+                for existing in layout['trees']:
+                    dist = math.sqrt((tx - existing['x'])**2 + (ty - existing['y'])**2)
+                    if dist < min(L, W) * 0.08:
+                        too_close = True
+                        break
+                
+                if not too_close:
+                    layout['trees'].append({
+                        'x': tx, 'y': ty,
+                        'radius': min(L, W) * (0.02 + np.random.random() * 0.02),
+                        'name': tree_name[:12],
+                        'type': 'fruit' if i % 2 == 0 else 'native'
+                    })
+                    break
+                attempts += 1
+    
+    # Paths connecting zones
+    path_points = [(layout['house']['x'] + layout['house']['width']/2, 
+                   layout['house']['y'] + layout['house']['height']/2)]
+    
+    # Add path to main features
+    for feature_name in ['pond', 'greenhouse', 'borewell']:
+        if feature_name in layout['features']:
+            f = layout['features'][feature_name]
+            if 'x' in f:
+                path_points.append((f['x'], f['y']))
+    
+    # Create curved paths
+    if len(path_points) > 1:
+        for i in range(len(path_points)-1):
+            x1, y1 = path_points[i]
+            x2, y2 = path_points[i+1]
+            # Bezier curve control points
+            mid_x = (x1 + x2) / 2 + np.random.random() * L * 0.1 - L * 0.05
+            mid_y = (y1 + y2) / 2 + np.random.random() * W * 0.1 - W * 0.05
+            
+            t = np.linspace(0, 1, 20)
+            x_curve = (1-t)**2 * x1 + 2*(1-t)*t * mid_x + t**2 * x2
+            y_curve = (1-t)**2 * y1 + 2*(1-t)*t * mid_y + t**2 * y2
+            
+            layout['paths'].append({'x': x_curve, 'y': y_curve})
+    
+    return layout
+
+
 def generate_visual(L, W, name, zone_fracs, has_pond, has_solar, has_greenhouse,
                    has_poultry, has_borewell, has_compost, has_swale,
                    slope_dir, borewell_loc, water_src, num_tree_species,
                    house_position, custom_trees, watermark_enabled=True, 
                    watermark_text="chundalgardens.com", dpi=150):
     """
-    Generate a professional homestead site plan visualization
+    Generate a unique professional homestead site plan visualization
+    Each map is architecturally different based on inputs
     Returns: BytesIO buffer containing PNG image
     """
     
-    # Create figure with proper dimensions
+    # Calculate intelligent layout
+    features = {
+        'has_pond': has_pond,
+        'has_solar': has_solar,
+        'has_greenhouse': has_greenhouse,
+        'has_poultry': has_poultry,
+        'has_borewell': has_borewell,
+        'has_compost': has_compost,
+        'has_swale': has_swale,
+        'borewell_loc': borewell_loc,
+        'num_tree_species': num_tree_species,
+        'custom_trees': custom_trees
+    }
+    
+    layout = calculate_optimal_layout(L, W, house_position, zone_fracs, features)
+    
+    # Create figure
     fig, ax = plt.subplots(1, 1, figsize=(16, 16))
     
-    # Calculate zones based on percentages
     total_area = L * W
+    category = get_plot_category(total_area)
     
-    # Zone colors (professional blueprint style)
-    zone_colors = {
-        'z0': '#E8F5E9',  # Residential - light green
-        'z1': '#C8E6C9',  # Kitchen garden
-        'z2': '#A5D6A7',  # Food forest
-        'z3': '#81C784',  # Pasture/Crops
-        'z4': '#66BB6A',  # Buffer
+    # Professional color schemes based on category
+    color_schemes = {
+        'small': {
+            'z0': '#FFF8E1',  # Warm residential
+            'z1': '#FFECB3',
+            'z2': '#FFE082',
+            'z3': '#FFD54F',
+            'z4': '#FFCA28',
+            'house': '#8D6E63',
+            'water': '#4FC3F7',
+            'accent': '#FF8F00'
+        },
+        'medium': {
+            'z0': '#E8F5E9',  # Natural green
+            'z1': '#C8E6C9',
+            'z2': '#A5D6A7',
+            'z3': '#81C784',
+            'z4': '#66BB6A',
+            'house': '#5D4037',
+            'water': '#29B6F6',
+            'accent': '#2E7D32'
+        },
+        'large': {
+            'z0': '#E3F2FD',  # Cool blue
+            'z1': '#BBDEFB',
+            'z2': '#90CAF9',
+            'z3': '#64B5F6',
+            'z4': '#42A5F5',
+            'house': '#37474F',
+            'water': '#0288D1',
+            'accent': '#1565C0'
+        }
     }
     
-    # Draw plot boundary
-    plot_rect = Rectangle((0, 0), L, W, linewidth=3, edgecolor='black', facecolor='none')
-    ax.add_patch(plot_rect)
+    colors = color_schemes[category]
     
-    # Calculate zone positions based on house position
-    if house_position == "North":
-        zones_order = ['z4', 'z3', 'z2', 'z1', 'z0']
-    elif house_position == "South":
-        zones_order = ['z0', 'z1', 'z2', 'z3', 'z4']
-    elif house_position == "East":
-        zones_order = ['z2', 'z1', 'z0', 'z3', 'z4']
-    elif house_position == "West":
-        zones_order = ['z3', 'z2', 'z1', 'z0', 'z4']
-    else:  # Center
-        zones_order = ['z4', 'z3', 'z0', 'z2', 'z1']
+    # Draw plot boundary with shadow effect
+    shadow = Rectangle((-2, -2), L+4, W+4, linewidth=0, 
+                       facecolor='gray', alpha=0.1)
+    ax.add_patch(shadow)
     
-    # Draw zones
-    current_y = 0
-    zone_heights = {
-        'z0': W * zone_fracs['z0'],
-        'z1': W * zone_fracs['z1'],
-        'z2': W * zone_fracs['z2'],
-        'z3': W * zone_fracs['z3'],
-        'z4': W * zone_fracs['z4']
+    boundary = Rectangle((0, 0), L, W, linewidth=4, 
+                        edgecolor='#1B5E20', facecolor='#FAFAFA', linestyle='-')
+    ax.add_patch(boundary)
+    
+    # Draw zones with texture effect
+    zone_names = {
+        'z0': 'Residential',
+        'z1': 'Kitchen Garden',
+        'z2': 'Food Forest',
+        'z3': 'Pasture/Crops',
+        'z4': 'Buffer Zone'
     }
     
-    zone_labels = {
-        'z0': ('Residential', zone_fracs['z0']),
-        'z1': ('Kitchen Garden', zone_fracs['z1']),
-        'z2': ('Food Forest', zone_fracs['z2']),
-        'z3': ('Pasture/Crops', zone_fracs['z3']),
-        'z4': ('Buffer/Fence', zone_fracs['z4'])
-    }
-    
-    for zone_key in zones_order:
-        height = zone_heights[zone_key]
-        if height > 0:
-            rect = Rectangle((0, current_y), L, height, 
-                           facecolor=zone_colors[zone_key],
-                           edgecolor='darkgreen', linewidth=2, alpha=0.7)
-            ax.add_patch(rect)
-            
-            label, frac = zone_labels[zone_key]
-            area_text = f"{label}\n{int(total_area * frac)} sq.ft."
-            ax.text(L/2, current_y + height/2, area_text,
-                   ha='center', va='center', fontsize=9, fontweight='bold')
-            current_y += height
-    
-    # Add custom trees
-    tree_spacing = min(L, W) / (len(custom_trees) + 1) if custom_trees else L/2
-    for i, tree in enumerate(custom_trees):
-        if tree.strip():
-            tree_x = L * 0.2 + (i % 3) * (L * 0.25)
-            tree_y = W * 0.3 + (i // 3) * (W * 0.15)
-            tree_circle = Circle((tree_x, tree_y), L*0.03, 
-                                facecolor='forestgreen', edgecolor='darkgreen', linewidth=1)
-            ax.add_patch(tree_circle)
-            ax.text(tree_x, tree_y - L*0.05, tree[:10], ha='center', va='top', 
-                   fontsize=7, rotation=0)
-    
-    # Add features based on selections
-    if has_borewell:
-        if 'North-East' in borewell_loc:
-            bx, by = L * 0.9, W * 0.9
-        elif 'North-West' in borewell_loc:
-            bx, by = L * 0.1, W * 0.9
-        elif 'South-East' in borewell_loc:
-            bx, by = L * 0.9, W * 0.1
-        else:
-            bx, by = L * 0.9, W * 0.5
+    for zone_key, zone_data in layout['zones'].items():
+        # Main zone
+        rect = FancyBboxPatch(
+            (zone_data['x'], zone_data['y']),
+            zone_data['width'], zone_data['height'],
+            boxstyle="round,pad=0.02,rounding_size=0.01",
+            facecolor=colors[zone_key],
+            edgecolor='#2E7D32',
+            linewidth=2,
+            alpha=0.8
+        )
+        ax.add_patch(rect)
         
-        well = Circle((bx, by), L*0.02, facecolor='blue', edgecolor='darkblue', linewidth=2)
+        # Zone label with background
+        label_x = zone_data['x'] + zone_data['width']/2
+        label_y = zone_data['y'] + zone_data['height']/2
+        
+        # Background for text
+        text_bg = Circle((label_x, label_y), min(zone_data['width'], zone_data['height'])*0.15,
+                        facecolor='white', edgecolor='none', alpha=0.8, zorder=5)
+        ax.add_patch(text_bg)
+        
+        area_text = f"{zone_names[zone_key]}\n{int(total_area * zone_fracs[zone_key]):,} sq.ft."
+        ax.text(label_x, label_y, area_text,
+               ha='center', va='center', fontsize=10, fontweight='bold',
+               color='#1B5E20', zorder=6)
+    
+    # Draw paths
+    for path in layout['paths']:
+        ax.plot(path['x'], path['y'], color='#8D6E63', linewidth=3, 
+                linestyle='--', alpha=0.8, zorder=1)
+        # Path edges
+        ax.plot(path['x'], path['y'], color='#5D4037', linewidth=5, 
+                alpha=0.4, zorder=0)
+    
+    # Draw house with architectural detail
+    h = layout['house']
+    # Main building
+    house_rect = FancyBboxPatch(
+        (h['x'], h['y']), h['width'], h['height'],
+        boxstyle="round,pad=0.01,rounding_size=0.02",
+        facecolor=colors['house'],
+        edgecolor='#3E2723',
+        linewidth=3
+    )
+    ax.add_patch(house_rect)
+    
+    # Roof
+    roof = Polygon([
+        [h['x']-h['width']*0.05, h['y']+h['height']],
+        [h['x']+h['width']/2, h['y']+h['height']*1.2],
+        [h['x']+h['width']*1.05, h['y']+h['height']]
+    ], facecolor='#BF360C', edgecolor='#3E2723', linewidth=2)
+    ax.add_patch(roof)
+    
+    # Door
+    door = Rectangle(
+        (h['x']+h['width']*0.4, h['y']),
+        h['width']*0.2, h['height']*0.3,
+        facecolor='#5D4037', edgecolor='#3E2723'
+    )
+    ax.add_patch(door)
+    
+    # Windows
+    for wx in [h['x']+h['width']*0.15, h['x']+h['width']*0.65]:
+        window = Rectangle(
+            (wx, h['y']+h['height']*0.5),
+            h['width']*0.15, h['height']*0.2,
+            facecolor='#B3E5FC', edgecolor='#3E2723', linewidth=1
+        )
+        ax.add_patch(window)
+    
+    ax.text(h['x']+h['width']/2, h['y']+h['height']*1.25, 'HOUSE',
+           ha='center', va='bottom', fontsize=11, fontweight='bold', color='#BF360C')
+    
+    # Draw features
+    if 'borewell' in layout['features']:
+        f = layout['features']['borewell']
+        well = Circle((f['x'], f['y']), f['radius'],
+                     facecolor=colors['water'], edgecolor='#01579B', linewidth=3)
         ax.add_patch(well)
-        ax.text(bx, by, 'W', ha='center', va='center', fontsize=8, color='white', fontweight='bold')
+        # Water ripple effect
+        for r in [1.3, 1.6, 1.9]:
+            ripple = Circle((f['x'], f['y']), f['radius']*r,
+                          facecolor='none', edgecolor=colors['water'], 
+                          linewidth=1, alpha=0.5/r, linestyle='--')
+            ax.add_patch(ripple)
+        ax.text(f['x'], f['y'], 'W', ha='center', va='center',
+               fontsize=9, fontweight='bold', color='white')
+        ax.text(f['x'], f['y']-f['radius']*1.5, 'Well',
+               ha='center', va='top', fontsize=8, color='#01579B')
     
-    if has_pond:
-        pond_x, pond_y = L * 0.3, W * 0.3
-        pond = Circle((pond_x, pond_y), L*0.08, facecolor='lightblue', 
-                     edgecolor='blue', linewidth=2, alpha=0.8)
+    if 'pond' in layout['features']:
+        f = layout['features']['pond']
+        if f.get('irregular'):
+            # Create irregular pond shape
+            theta = np.linspace(0, 2*np.pi, 20)
+            r = f['radius'] * (1 + 0.2 * np.sin(4*theta) + 0.1 * np.random.random(20))
+            x_pond = f['x'] + r * np.cos(theta)
+            y_pond = f['y'] + r * np.sin(theta)
+            pond = Polygon(list(zip(x_pond, y_pond)),
+                          facecolor='#E1F5FE', edgecolor='#0288D1', 
+                          linewidth=2, alpha=0.9)
+        else:
+            pond = Circle((f['x'], f['y']), f['radius'],
+                         facecolor='#E1F5FE', edgecolor='#0288D1', linewidth=2)
         ax.add_patch(pond)
-        ax.text(pond_x, pond_y, 'POND', ha='center', va='center', fontsize=9, color='darkblue')
+        ax.text(f['x'], f['y'], 'POND', ha='center', va='center',
+               fontsize=9, fontweight='bold', color='#01579B')
     
-    if has_solar:
-        solar_x, solar_y = L * 0.7, W * 0.85
-        solar = Rectangle((solar_x, solar_y), L*0.15, L*0.1, 
-                         facecolor='orange', edgecolor='darkorange', linewidth=2)
-        ax.add_patch(solar)
-        ax.text(solar_x + L*0.075, solar_y + L*0.05, 'SOLAR', ha='center', va='center',
-                fontsize=8, fontweight='bold')
+    if 'solar' in layout['features']:
+        f = layout['features']['solar']
+        # Solar panels with grid
+        panel = Rectangle((f['x'], f['y']), f['width'], f['height'],
+                         facecolor='#FFF3E0', edgecolor='#E65100', linewidth=2)
+        ax.add_patch(panel)
+        
+        # Grid lines
+        for i in range(1, 4):
+            ax.plot([f['x'] + f['width']*i/4, f['x'] + f['width']*i/4],
+                   [f['y'], f['y']+f['height']], 'orange', linewidth=1)
+            ax.plot([f['x'], f['x']+f['width']],
+                   [f['y'] + f['height']*i/3, f['y']+f['height']*i/3], 'orange', linewidth=1)
+        
+        ax.text(f['x']+f['width']/2, f['y']+f['height']/2, '☀',
+               ha='center', va='center', fontsize=20, color='#E65100')
+        ax.text(f['x']+f['width']/2, f['y']-f['height']*0.1, 'Solar',
+               ha='center', va='top', fontsize=8, color='#E65100')
     
-    if has_greenhouse:
-        gh_x, gh_y = L * 0.6, W * 0.6
-        gh = Rectangle((gh_x, gh_y), L*0.2, L*0.15, facecolor='lightyellow',
-                      edgecolor='green', linewidth=2, linestyle='--')
+    if 'greenhouse' in layout['features']:
+        f = layout['features']['greenhouse']
+        gh = Rectangle((f['x'], f['y']), f['width'], f['height'],
+                      facecolor='#F1F8E9', edgecolor='#33691E', 
+                      linewidth=2, linestyle='--', alpha=0.9)
         ax.add_patch(gh)
-        ax.text(gh_x + L*0.1, gh_y + L*0.075, 'GREENHOUSE', ha='center', va='center',
-                fontsize=8, color='green')
+        # Arched roof
+        arc = Arc((f['x']+f['width']/2, f['y']+f['height']), 
+                 f['width'], f['height']*0.4,
+                 angle=0, theta1=0, theta2=180, color='#33691E', linewidth=2)
+        ax.add_patch(arc)
+        ax.text(f['x']+f['width']/2, f['y']+f['height']/2, 'GH',
+               ha='center', va='center', fontsize=10, color='#33691E')
     
-    if has_poultry:
-        p_x, p_y = L * 0.15, W * 0.75
-        poultry = Rectangle((p_x, p_y), L*0.12, L*0.1, facecolor='wheat',
-                           edgecolor='brown', linewidth=2)
-        ax.add_patch(poultry)
-        ax.text(p_x + L*0.06, p_y + L*0.05, 'POULTRY', ha='center', va='center',
-                fontsize=8, color='brown')
+    if 'poultry' in layout['features']:
+        f = layout['features']['poultry']
+        coop = Rectangle((f['x'], f['y']), f['width'], f['height'],
+                        facecolor='#FFF8E1', edgecolor='#F57F17', linewidth=2)
+        ax.add_patch(coop)
+        # Fence
+        for fx in np.linspace(f['x'], f['x']+f['width'], 5):
+            ax.plot([fx, fx], [f['y'], f['y']+f['height']], 
+                   color='#F57F17', linewidth=1)
+        ax.plot([f['x'], f['x']+f['width']], [f['y']+f['height'], f['y']+f['height']],
+               color='#F57F17', linewidth=2)
+        ax.text(f['x']+f['width']/2, f['y']+f['height']/2, '🐔',
+               ha='center', va='center', fontsize=14)
     
-    if has_compost:
-        c_x, c_y = L * 0.85, W * 0.65
-        compost = Circle((c_x, c_y), L*0.025, facecolor='saddlebrown', 
-                        edgecolor='black', linewidth=1)
-        ax.add_patch(compost)
-        ax.text(c_x, c_y - L*0.04, 'Compost', ha='center', va='top', fontsize=7)
+    if 'compost' in layout['features']:
+        for i, comp in enumerate(layout['features']['compost']):
+            c = Circle((comp['x'], comp['y']), comp['size'],
+                      facecolor='#3E2723', edgecolor='black', linewidth=1)
+            ax.add_patch(c)
+            ax.text(comp['x'], comp['y'], 'C'+str(i+1),
+                   ha='center', va='center', fontsize=7, color='white')
     
-    if has_swale:
-        for i in range(3):
-            swale_y = W * (0.25 + i * 0.2)
-            ax.plot([0, L], [swale_y, swale_y], 'b--', linewidth=1.5, alpha=0.6)
-            ax.text(L*0.02, swale_y + W*0.01, f'Swale {i+1}', fontsize=7, color='blue')
+    if 'swales' in layout['features']:
+        for i, swale in enumerate(layout['features']['swales']):
+            ax.fill_between(swale['x'], swale['y']-W*0.01, swale['y']+W*0.01,
+                          color='#81D4FA', alpha=0.6, edgecolor='#0288D1', linewidth=1)
+            ax.text(swale['x'][0], swale['y'][0]+W*0.02, f'Swale {i+1}',
+                   fontsize=8, color='#01579B', fontweight='bold')
     
-    # Add dimension lines
-    ax.annotate('', xy=(0, -W*0.05), xytext=(L, -W*0.05),
-                arrowprops=dict(arrowstyle='<->', color='black', lw=1.5))
-    ax.text(L/2, -W*0.08, f'{int(L)} ft', ha='center', fontsize=10, fontweight='bold')
+    # Draw trees with variety
+    for tree in layout['trees']:
+        # Tree crown
+        crown = Circle((tree['x'], tree['y']), tree['radius'],
+                      facecolor='#2E7D32' if tree['type'] == 'native' else '#FF6F00',
+                      edgecolor='#1B5E20', linewidth=2, alpha=0.8)
+        ax.add_patch(crown)
+        
+        # Trunk
+        trunk = Rectangle((tree['x']-tree['radius']*0.2, tree['y']-tree['radius']*0.5),
+                         tree['radius']*0.4, tree['radius']*0.5,
+                         facecolor='#5D4037', edgecolor='#3E2723')
+        ax.add_patch(trunk)
+        
+        # Label
+        ax.text(tree['x'], tree['y']+tree['radius']*1.3, tree['name'],
+               ha='center', va='bottom', fontsize=7, rotation=0,
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                        edgecolor='none', alpha=0.8))
     
-    ax.annotate('', xy=(-L*0.05, 0), xytext=(-L*0.05, W),
-                arrowprops=dict(arrowstyle='<->', color='black', lw=1.5))
-    ax.text(-L*0.1, W/2, f'{int(W)} ft', ha='center', fontsize=10, fontweight='bold',
-            rotation=90)
+    # Dimension lines with arrows
+    # Horizontal
+    ax.annotate('', xy=(0, -W*0.06), xytext=(L, -W*0.06),
+                arrowprops=dict(arrowstyle='<->', color='#424242', lw=2))
+    ax.text(L/2, -W*0.09, f'{int(L)} ft', ha='center', fontsize=11, 
+            fontweight='bold', color='#424242')
     
-    # Add compass
+    # Vertical
+    ax.annotate('', xy=(-L*0.06, 0), xytext=(-L*0.06, W),
+                arrowprops=dict(arrowstyle='<->', color='#424242', lw=2))
+    ax.text(-L*0.09, W/2, f'{int(W)} ft', ha='center', fontsize=11,
+            fontweight='bold', color='#424242', rotation=90)
+    
+    # Compass rose
     compass_x, compass_y = L * 0.92, W * 0.08
-    ax.annotate('N', xy=(compass_x, compass_y + L*0.05), fontsize=14, 
-                ha='center', fontweight='bold', color='red')
-    ax.annotate('', xy=(compass_x, compass_y + L*0.04), 
-                xytext=(compass_x, compass_y),
-                arrowprops=dict(arrowstyle='->', color='red', lw=2))
+    # Outer circle
+    compass_circle = Circle((compass_x, compass_y), L*0.04,
+                           facecolor='white', edgecolor='#424242', linewidth=2)
+    ax.add_patch(compass_circle)
+    # North arrow
+    ax.annotate('', xy=(compass_x, compass_y + L*0.035),
+                xytext=(compass_x, compass_y - L*0.02),
+                arrowprops=dict(arrowstyle='->', color='#D32F2F', lw=3))
+    ax.text(compass_x, compass_y + L*0.045, 'N', ha='center', 
+           fontsize=14, fontweight='bold', color='#D32F2F')
+    # Other directions
+    for direction, offset in [('E', (0.03, 0)), ('S', (0, -0.03)), ('W', (-0.03, 0))]:
+        ax.text(compass_x + offset[0]*L, compass_y + offset[1]*L, direction,
+               ha='center', va='center', fontsize=9, color='#616161')
     
-    # Add title
-    ax.set_title(f'{name}\nSite Plan - {int(total_area):,} sq.ft. ({total_area/43560:.2f} acres)', 
-                 fontsize=14, fontweight='bold', pad=20)
+    # Title block
+    title_text = f'{name}\nSite Plan - {int(total_area):,} sq.ft. ({total_area/43560:.2f} acres)'
+    ax.text(L/2, W*1.06, title_text, ha='center', va='bottom',
+           fontsize=16, fontweight='bold', color='#1B5E20',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F5E9', 
+                    edgecolor='#2E7D32', linewidth=2))
     
-    # Add legend
+    # Info box
+    info_text = f'Slope: {slope_dir} | Water: {water_src} | House: {house_position}'
+    ax.text(L*0.02, W*0.98, info_text, fontsize=9, verticalalignment='top',
+           bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                    edgecolor='#BDBDBD', alpha=0.9))
+    
+    # Legend
     legend_elements = [
-        patches.Patch(facecolor=zone_colors['z0'], edgecolor='black', label='Zone 0: Residential'),
-        patches.Patch(facecolor=zone_colors['z1'], edgecolor='black', label='Zone 1: Kitchen Garden'),
-        patches.Patch(facecolor=zone_colors['z2'], edgecolor='black', label='Zone 2: Food Forest'),
-        patches.Patch(facecolor=zone_colors['z3'], edgecolor='black', label='Zone 3: Pasture/Crops'),
-        patches.Patch(facecolor=zone_colors['z4'], edgecolor='black', label='Zone 4/5: Buffer'),
+        patches.Patch(facecolor=colors['z0'], edgecolor='black', label='Zone 0: Residential'),
+        patches.Patch(facecolor=colors['z1'], edgecolor='black', label='Zone 1: Kitchen Garden'),
+        patches.Patch(facecolor=colors['z2'], edgecolor='black', label='Zone 2: Food Forest'),
+        patches.Patch(facecolor=colors['z3'], edgecolor='black', label='Zone 3: Pasture/Crops'),
+        patches.Patch(facecolor=colors['z4'], edgecolor='black', label='Zone 4/5: Buffer'),
+        patches.Patch(facecolor=colors['water'], edgecolor='black', label='Water Features'),
+        patches.Patch(facecolor='#2E7D32', edgecolor='black', label='Trees'),
     ]
-    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1),
-             fontsize=9, frameon=True, fancybox=True, shadow=True)
+    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 0.95),
+             fontsize=9, frameon=True, fancybox=True, shadow=True, ncol=1)
     
-    # Add slope indicator
-    ax.text(L*0.02, W*0.98, f'Slope: {slope_dir}', fontsize=9, 
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
-    # Add water source info
-    ax.text(L*0.02, W*0.94, f'Water: {water_src}', fontsize=9,
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
-    
-    # WATERMARK SYSTEM
+    # WATERMARK SYSTEM - Professional
     if watermark_enabled:
-        # Large semi-transparent watermark across entire image
-        ax.text(L/2, W/2, watermark_text, fontsize=35, color='gray',
-                ha='center', va='center', alpha=0.25, rotation=30,
+        # Large diagonal watermark
+        ax.text(L/2, W/2, watermark_text, fontsize=40, color='#9E9E9E',
+                ha='center', va='center', alpha=0.2, rotation=35,
                 fontweight='bold', zorder=1000)
         
-        # Additional diagonal watermarks
-        for offset in [-0.3, 0, 0.3]:
+        # Additional watermarks
+        for i, offset in enumerate([-0.4, 0, 0.4]):
+            alpha = 0.15 - abs(offset)*0.1
             ax.text(L*(0.5 + offset), W*(0.5 + offset), watermark_text, 
-                   fontsize=20, color='gray', ha='center', va='center', 
-                   alpha=0.15, rotation=45, fontweight='bold', zorder=999)
+                   fontsize=25, color='#9E9E9E', ha='center', va='center', 
+                   alpha=alpha, rotation=35, fontweight='bold', zorder=999)
     else:
-        # Small corner watermark (hard to crop out)
-        # Multiple small watermarks in corners
-        corner_positions = [(L*0.05, W*0.05), (L*0.95, W*0.05), 
-                           (L*0.05, W*0.95), (L*0.95, W*0.95), (L*0.5, W*0.02)]
-        for cx, cy in corner_positions:
-            ax.text(cx, cy, watermark_text, fontsize=6, color='darkgray',
+        # Corner watermarks
+        positions = [(L*0.05, W*0.05), (L*0.95, W*0.05), 
+                    (L*0.05, W*0.95), (L*0.95, W*0.95)]
+        for cx, cy in positions:
+            ax.text(cx, cy, watermark_text, fontsize=7, color='#757575',
                    ha='center', va='center', alpha=0.6, fontweight='bold', zorder=1000)
-        
-        # Edge watermark
-        ax.text(L/2, W*0.01, watermark_text, fontsize=5, color='darkgray',
-               ha='center', va='bottom', alpha=0.5, fontweight='bold', zorder=1000)
     
     # Set limits and aspect
-    ax.set_xlim(-L*0.15, L*1.35)
-    ax.set_ylim(-W*0.15, W*1.05)
+    margin = max(L, W) * 0.15
+    ax.set_xlim(-margin, L + margin + L*0.3)  # Extra space for legend
+    ax.set_ylim(-margin, W + margin)
     ax.set_aspect('equal')
     ax.axis('off')
     
@@ -346,7 +744,7 @@ def generate_visual(L, W, name, zone_fracs, has_pond, has_solar, has_greenhouse,
     # Save to buffer
     buf = BytesIO()
     plt.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', 
-                facecolor='white', edgecolor='none')
+                facecolor='white', edgecolor='none', pad_inches=0.2)
     buf.seek(0)
     plt.close(fig)
     
